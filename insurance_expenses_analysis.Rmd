@@ -1,0 +1,151 @@
+---
+title: "Insurance Expenses Analysis"
+output: html_document
+date: "2022-12-26"
+---
+
+Copy the dataset to your working directory then load the data .
+
+```{r}
+insurance <- read.csv("insurance.csv" , stringsAsFactors = TRUE)
+head(insurance)
+
+```
+
+Lets have a look at the structure of the data
+```{r}
+str(insurance)
+```
+
+ We need to change the name of the target variable to expenses.
+
+```{r}
+library(dplyr)
+insurance = insurance %>%
+  rename(expenses = charges)
+```
+
+It is important to check for normality.
+```{r}
+summary(insurance$expenses)
+```
+ NB: the expenses are skewed to the right because the mean > the median.
+
+Plotting the results
+```{r}
+hist(insurance$expenses)
+```
+
+How are the policyholders distributed across the regions?
+```{r}
+table(insurance$region)
+
+```
+
+What are the relationships in the among the feature variables and the dependent variable?
+```{r}
+cor(insurance[c("age", "bmi", "children", "expenses")])
+```
+
+
+Let's produce a scatterplot matrix for these relationships
+```{r}
+pairs(insurance[c("age","bmi","children","expenses")])
+```
+
+
+Lets add more info to the plots
+```{r}
+library(psych)
+pairs.panels(insurance[c("age", "bmi","children","expenses")])
+```
+
+
+The next step is to build a model
+```{r}
+ins_model <-  lm(expenses ~ age + sex + bmi + children + smoker + region ,data = insurance)
+ins_model
+```
+
+
+How well does our model fit the data?
+```{r}
+summary(ins_model)
+```
+The adjusted R-squared value is 0.74 . 
+
+The model is performing quite well but can the perfornmace be improved ?
+
+ .age has a non-linear relationship on medical expenses
+```{r}
+insurance$age2 <- insurance$age^2
+```
+
+
+.The bmi's effect on expenses is significant after the 30 threshold i.e only if individual is obese
+```{r}
+insurance$bmi30 <- ifelse(insurance$bmi >= 30 , 1 , 0)
+```
+
+
+.We will also add the interaction (combined effect) of smoker and obesity variables 
+
+hence our improved model is
+```{r}
+ins_model2 <- lm(expenses ~ age + age2 + sex + bmi + children + region + smoker*bmi30 ,data = insurance)
+summary(ins_model2)
+```
+The model performs better than the previous model 
+The adjusted R-squared has increased from 0.75 to 0.87
+
+Now we can perform some predictions on the training data
+```{r}
+insurance$pred <-  predict(ins_model2 , insurance)
+```
+
+
+What is the correlation between the predicted and actual cost of insurance
+```{r}
+cor(insurance$pred , insurance$expenses) 
+```
+0.93 indicates a very strong linear relationship between predicted and actual values.
+
+lets display this graphically . 
+```{r}
+plot(insurance$pred , insurance$expenses)
+abline(a = 0 , b = 1 , col = "red", lwd = 3 , lty = 2)
+```
+
+
+In the real world we could have a propective policyholder with the following characteristics:
+ 
+ 30 year old, overweight, male non-smoker with two children in the Northeast.
+ 
+ The predicted expense is :
+```{r}
+predict(ins_model2 , data.frame(age = 30 , age2 = 30^2 , bmi = 30 ,bmi30 = 1 , sex = "male" , 
+                                smoker = "no" , children = 2 ,region = "northeast"))
+
+```
+
+The model expects the company to pay 5972.859 in expenses . 
+
+Comparing this rate to a female with the same characteristics as the male counterpart : 
+
+```{r}
+predict(ins_model2 , data.frame(age = 30 , age2 = 30^2 , bmi = 30 , bmi30 = 1 , sex = "female" ,
+                                 smoker = "no" , children = 2 , region = "northeast"))
+```
+
+The model expects the company to pay 6469.683 in expenses .
+
+What is the effect of reduction in  thee number of children from two to zero on expenses ?
+```{r}
+predict(ins_model2 , data.frame(age = 30 , age2 = 30^2 , bmi = 30 , bmi30 = 1 , sex = "female" , 
+                                smoker = "no" , children = 0 ,region = "northeast"))
+```
+
+the expenses reduce to 5112.561   .
+
+Following similar steps for a number of additional customer segments, the insurance
+company would be able to develop a profitable pricing structure for various demographics
